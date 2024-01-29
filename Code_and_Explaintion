@@ -1,0 +1,153 @@
+#What is needed:
+#OpenAi key = {YOUR_OPENAI_KEY}
+#Connection details of your SQL Endpoint : {YOUR_SQL_ENDPOINT} + {YOUR_DB_NAME}
+#Table names = {YOUR_TABLE_NAME}
+#Install ODBC Driver
+#Install Gradio
+#Install Azure identity
+
+
+#TESTING SCRIPT
+from azure.identity import InteractiveBrowserCredential
+import struct
+from itertools import chain, repeat
+import pyodbc
+import openai
+import csv
+import io
+import gradio
+import gradio as gr
+import os
+from gradio_client import Client
+
+
+
+#Establishing Connection to OPENAI --- CHATGPT
+openai.api_key = "{YOUR_OPENAI_KEY}"
+client = openai
+
+
+#ESTABLISHING CONNECTION TO FABRIC DATABASE
+print('------------------Creating connection to Server')
+
+def MAIN_FUNCTION():
+    #Authentication to login in and help retrieve the access token
+    credential = InteractiveBrowserCredential()
+
+    sql_endpoint = "{YOUR_SQL_ENDPOINT}"
+    database = "{YOUR_DB_NAME}" 
+
+    #This is your connection string
+    connection_string = f"Driver={{ODBC Driver 18 for SQL Server}};Server={sql_endpoint},1433;Database=f{database};Encrypt=Yes;TrustServerCertificate=No"
+    #Getting the access token credentials
+    token_object = credential.get_token("https://database.windows.net//.default")
+
+    #Decoding the Access token which was collected
+    token_as_bytes = bytes(token_object.token, "UTF-8") # Convert the token to a UTF-8 byte string
+    encoded_bytes = bytes(chain.from_iterable(zip(token_as_bytes, repeat(0)))) # Encode the bytes to a Windows byte string
+    token_bytes = struct.pack("<i", len(encoded_bytes)) + encoded_bytes # Package the token into a bytes object
+    attrs_before = {1256: token_bytes}
+
+    #Starting to build the connection
+    connection = pyodbc.connect(connection_string, attrs_before=attrs_before)
+    cursor = connection.cursor()
+
+    #Connection Successful and starting to get the two tables:
+        #Getting Menu Items
+    data_menu_items_execute = cursor.execute("SELECT * FROM {YOUR_TABLE_NAME}")
+    menu_items = data_menu_items_execute.fetchall()
+
+        #Getting Order Details
+    data_order_details_execute = cursor.execute("SELECT * FROM {YOUR_TABLE_NAME}")
+    order_details = data_order_details_execute.fetchall()
+
+    #Here we are passing the tables turning them into csv format to help ChatGpt understand the data easier.
+    order_details_csv_data = order_details_csv(order_details)
+    menu_item_csv_data = menu_item_csv(menu_items)
+    
+    print('------------------Connection Successful')
+    print('------------------Creating Link to Chatbot')
+
+    #This 'messages' is how we're going to program/teach Open AI - CHATGPT to understand my data
+    messages=[
+                {"role": "system", "content": "You now act act as a middle man between USER and a DATASET. You main goal is to answer questions based on the DATASET i have provided you with. You will do this by scanning the DATASET and respond with the relavent information. Also when ever you respond I want you to keep it short and simple; make sure to include the $ dollar sign when nesseary regarding the price"},
+                {"role": "user", "content": f"I have provided you with this data {menu_item_csv_data} in a csv format. Within thid Data it has information about menu items within a resturant such as price of the item and the name of the item. I will be asking a question similar to this 'What is the price of a Hamburger?' and I want you to scan and find the corresponding answer"},
+                {"role": "system", "content": f"I have also provided you with data in a csv format{order_details_csv_data}. I want you to mainly be focusing on the 'order_date' also refered to as Date and 'item_id'. I will be asking you questions and i want you to scan the data and retrieve the results required. In addition  {menu_item_csv_data} and {order_details_csv_data} can be joined together on the columns menu_item_id = item_id ."}
+            ]
+    
+    #Here we are calling Chatgpt (starting the process)
+    def CustomChatGPT(Question):
+        messages.append({"role": "user", "content": Question})
+        response = openai.ChatCompletion.create(
+            model = "gpt-3.5-turbo",
+            messages = messages
+        )
+        ChatGPT_reply = response["choices"][0]["message"]["content"]
+        messages.append({"role": "assistant", "content": ChatGPT_reply})
+        return ChatGPT_reply
+    
+
+    #Html link to display the pictures - (These are just some personalized Images to insert into the App interface)
+    Picture_Table= f"<img src='https://m1.secondhandapp.at/2.0/65b29ab731fece053584b1cf'>"
+    Hive3_Logo = f"<img src='https://hive3.com/wp-content/uploads/2022/01/2.png'>"
+
+
+    #Using the gadio package to create the interface / This will return a https link to be used for the interface
+    demo = gradio.Interface(
+        fn=CustomChatGPT, 
+        inputs = "text", 
+        outputs = "text", 
+        title = f"{Hive3_Logo}                                                AI CHATBOT ",
+        description= f"{Picture_Table}",
+        article="Ignore Date: 1/1/23",
+        allow_flagging="never"
+    )
+
+    #Launching the App
+    demo.launch(share=True)
+       
+    #Closing the connection - Finished
+    cursor.close()
+    connection.close()
+
+
+def menu_item_csv(menu_items):
+    # Create a CSV-formatted string in-memory
+    csv_output = io.StringIO()
+    csv_writer = csv.writer(csv_output)
+
+    # Write the header
+    csv_writer.writerow(['menu_item_id', 'item_name', 'category', 'price'])
+
+    # Write the data
+    csv_writer.writerows(menu_items)
+
+    # Get the CSV-formatted string
+    menu_items_csv_data = csv_output.getvalue()
+
+    return menu_items_csv_data
+
+def order_details_csv(order_details):
+    # Create a CSV-formatted string in-memory
+    csv_output = io.StringIO()
+    csv_writer = csv.writer(csv_output)
+
+    # Write the header
+    csv_writer.writerow(['order_details_id', 'order_id', 'order_date', 'order_time', 'item_id'])
+
+    # Write the data
+    csv_writer.writerows(order_details)
+
+    # Get the CSV-formatted string
+    order_details_csv_data = csv_output.getvalue()
+
+    return order_details_csv_data
+    
+MAIN_FUNCTION()
+
+
+        
+
+
+
+
