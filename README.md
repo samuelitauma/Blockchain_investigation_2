@@ -3,3 +3,5 @@ This is a extension to the Blockchain project already inside my repository colle
 
 Why?
 Essentially, this will be a website link where you have simple instructions on how to question your data instead of asking questions in the terminal. (Which in most cases some people don’t have the programming instruments) Therefore the user can just go on the link and ask questions.
+
+Here is a link to my youtube video to help if you have connection issues to Microsoft Fabric: https://www.youtube.com/watch?v=yC9E-GYA0Dg
